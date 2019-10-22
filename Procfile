@@ -1,0 +1,1 @@
+worker: python3 e7cataTradeBot.py

@@ -20,6 +20,16 @@ from time import time
 from botocore.exceptions import ClientError
 
 
+class Config:
+    config = None
+
+    @staticmethod
+    #todo check if no config
+    def setup_config():
+        Config.config = configparser.ConfigParser()
+        Config.config.read('config.ini')
+
+
 class S3FileManager:
     bucket = 'cloud-cube-eu'
     key = 'ln75ki813ek6/public/'
@@ -41,12 +51,10 @@ class S3FileManager:
                 region_name='eu-west-1')
         except KeyError:
             print("Loading from config...")
-            config = configparser.ConfigParser()
-            config.read('config.ini')
             S3FileManager.client = boto3.client(
                 's3',
-                aws_access_key_id=config['DEFAULT']['CLOUDCUBE_ACCESS_KEY_ID'],
-                aws_secret_access_key=config['DEFAULT']['CLOUDCUBE_SECRET_ACCESS_KEY'],
+                aws_access_key_id=Config.config['DEFAULT']['CLOUDCUBE_ACCESS_KEY_ID'],
+                aws_secret_access_key=Config.config['DEFAULT']['CLOUDCUBE_SECRET_ACCESS_KEY'],
                 region_name='eu-west-1')
 
     @staticmethod
@@ -356,8 +364,6 @@ class BotVar:
 
 # region Commands
 bot = commands.Bot(command_prefix=('!', 'a!'))
-
-
 # Admin commands
 @bot.command(name='adminrole')
 @commands.check(User.has_role_management_permissions)
@@ -598,7 +604,12 @@ def load_files():
 
 #######################################################
 # region Start up
+Config.setup_config()
 S3FileManager.setup_client()
 load_files()
-bot.run('NjM1NTE3NjY3MjIyMjI0OTAy.Xda4Lw.sS6sLAjkWEdBXTyN5pXO1gxPY3Q')
+
+try:
+    bot.run(os.environ['DISCORD_BOT_TOKEN'])
+except KeyError:
+    bot.run(Config.config['DEFAULT']['DISCORD_BOT_TOKEN'])
 # endregion

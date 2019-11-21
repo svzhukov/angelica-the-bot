@@ -8,6 +8,11 @@ verify_ssl = true
 [packages]
 discord = "*"
 pprint = "*"
+boto3 = "*"
+boto = "*"
+pyaztro = "*"
+jsonpickle = "*"
+discord-py = "*"
 
 [requires]
 python_version = "3.7"

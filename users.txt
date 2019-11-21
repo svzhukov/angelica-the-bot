@@ -1,1 +1,0 @@
-{"118435077477761029": {"name": "sasha", "score": 0, "current_request_id": "4feeb956-7c25-4a2d-8389-7a85d3d2b1b1", "reserved_signs_ids": ["2693b31b-bbcf-4c85-951c-6674679aa276"]}, "165305568075055104": {"name": "DatCream", "score": -2, "current_request_id": "758217b3-2045-4d6d-80cb-d293f496acb6", "reserved_signs_ids": ["2693b31b-bbcf-4c85-951c-6674679aa276"]}}

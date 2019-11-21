@@ -600,5 +600,5 @@ def load_files():
 # region Start up
 S3FileManager.setup_client()
 load_files()
-bot.run('NjM1NTE3NjY3MjIyMjI0OTAy.Xda18Q.UOdQvkJ2hbjhOvaOtNbox4d6C4g')
+bot.run('NjM1NTE3NjY3MjIyMjI0OTAy.Xda4Lw.sS6sLAjkWEdBXTyN5pXO1gxPY3Q')
 # endregion

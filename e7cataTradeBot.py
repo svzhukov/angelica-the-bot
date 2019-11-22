@@ -19,18 +19,37 @@ from pyaztro import Aztro
 from time import time
 from botocore.exceptions import ClientError
 
-
+# region Classes
 class Config:
     config = None
 
     @staticmethod
-    #todo check if no config
+    def load():
+        print('Load: Config')
+        Config.setup_config()
+        Config.set_env_vars()
+
+    @staticmethod
     def setup_config():
         Config.config = configparser.ConfigParser()
         Config.config.read('config.ini')
 
+    @staticmethod
+    def set_env_vars():
+        try:
+            print("setting env vars from config.ini")
+            os.environ['CLOUDCUBE_ACCESS_KEY_ID'] = Config.config['DEFAULT']['CLOUDCUBE_ACCESS_KEY_ID']
+            os.environ['CLOUDCUBE_SECRET_ACCESS_KEY'] = Config.config['DEFAULT']['CLOUDCUBE_SECRET_ACCESS_KEY']
+            os.environ['DISCORD_BOT_TOKEN'] = Config.config['DEFAULT']['DISCORD_BOT_TOKEN']
+            os.environ['DISCORD_BOT_PREFIX'] = Config.config['DEFAULT']['DISCORD_BOT_PREFIX']
+            os.environ['DISCORD_BOT_PREFIX_SECOND'] = Config.config['DEFAULT']['DISCORD_BOT_PREFIX_SECOND']
+        except KeyError:
+            print("using already set env vars")
+
 
 class S3FileManager:
+    client = None
+
     bucket = 'cloud-cube-eu'
     key = 'ln75ki813ek6/public/'
 
@@ -38,24 +57,21 @@ class S3FileManager:
     guild_file_prefix = 'guild-'
     guild_file_suffix = '.json'
 
-    client = None
     guild_ids: List[int] = list()
 
     @staticmethod
+    def load():
+        print('Load: S3FileManager')
+        S3FileManager.setup_client()
+        S3FileManager.download_files()
+
+    @staticmethod
     def setup_client():
-        try:
-            S3FileManager.client = boto3.client(
-                's3',
-                aws_access_key_id=os.environ['CLOUDCUBE_ACCESS_KEY_ID'],
-                aws_secret_access_key=os.environ['CLOUDCUBE_SECRET_ACCESS_KEY'],
-                region_name='eu-west-1')
-        except KeyError:
-            print("Loading from config...")
-            S3FileManager.client = boto3.client(
-                's3',
-                aws_access_key_id=Config.config['DEFAULT']['CLOUDCUBE_ACCESS_KEY_ID'],
-                aws_secret_access_key=Config.config['DEFAULT']['CLOUDCUBE_SECRET_ACCESS_KEY'],
-                region_name='eu-west-1')
+        S3FileManager.client = boto3.client(
+            's3',
+            aws_access_key_id=os.environ['CLOUDCUBE_ACCESS_KEY_ID'],
+            aws_secret_access_key=os.environ['CLOUDCUBE_SECRET_ACCESS_KEY'],
+            region_name='eu-west-1')
 
     @staticmethod
     def download_files():
@@ -147,8 +163,8 @@ class Guild:
 
     @staticmethod
     def load():
+        print('Load: Guild')
         Guild.guilds = []
-        print("Loading guilds: " + str(S3FileManager.guild_ids))
         for guild in S3FileManager.guild_ids:
             with open(S3FileManager.file_name(guild), 'r') as f:
                 Guild.guilds.append(jsonpickle.decode(json.load(f)))
@@ -347,7 +363,7 @@ class Sign:
 
     @staticmethod
     def load():
-        print("Loading signs")
+        print('Load: Sign')
         with open('catalysts.json', 'r') as f:
             Sign.signs = jsonpickle.decode(json.load(f))
             Catalyst.catalysts = [cata for cata_list in [sign.catas for sign in Sign.signs] for cata in cata_list]
@@ -360,11 +376,24 @@ class BotVar:
     def __init__(self, admin_role: Union[str, int] = None, min_score: int = None):
         self.admin_role = admin_role if admin_role else BotVar.default_role
         self.min_score = min_score if min_score else BotVar.default_min_score
+# endregion
+
+
+# region Boot up
+def load():
+    Config.load()
+    S3FileManager.load()
+    Sign.load()
+    Guild.load()
+
+
+load()
+# endregion
 
 
 # region Commands
-bot = commands.Bot(command_prefix=('!', 'a!'))
-# Admin commands
+# Admin
+bot = commands.Bot(command_prefix=(os.environ['DISCORD_BOT_PREFIX'], os.environ['DISCORD_BOT_PREFIX_SECOND']))
 @bot.command(name='adminrole')
 @commands.check(User.has_role_management_permissions)
 async def com_admin_role(ctx, *args):
@@ -426,10 +455,11 @@ async def com_test(ctx, arg=None):
     pass
 
 
-# User commands
+# All user
 @bot.command(name='respond')
 async def com_respond(ctx):
     await ctx.send("Hello, I'm alive and responding!")
+    print("Hello, I'm alive and responding!")
 
 
 @bot.command(name='board')
@@ -498,12 +528,12 @@ async def com_thank(ctx):
 
 @bot.command(name='catalysts')
 async def com_catas(ctx):
-    await send_pict(ctx, 'catas.jpg')
+    await send_file(ctx, 'catas.jpg')
 
 
 @bot.command(name='how')
 async def com_how(ctx):
-    await send_pict(ctx, 'how.jpg')
+    await send_file(ctx, 'how.jpg')
 
 
 @bot.command(name='aid')
@@ -541,25 +571,25 @@ async def com_gift(ctx):
 @bot.command(name='ahelp')
 async def com_help(ctx):
     embed = discord.Embed(title="Angelica The Bot",
-                          description="*github link*",
+                          description="See more info about the bot on [GitHub](https://github.com/svzhukov/angelica-the-bot)",
                           color=0xffc0cb)
 
     embed.add_field(name="`[User commands]`", value="All arguments should be provided without **<**, **>** brackets", inline=False)
-    embed.add_field(name="!how    **<--**", value="Quick tutorial that shows how to use the bot", inline=False)
-    embed.add_field(name="!request <catalyst_query>", value="Requests named catalysts, **-2** to points", inline=False)
+    embed.add_field(name="!how    **<--**", value="Quick visual tutorial that shows how to use the bot", inline=False)
+    embed.add_field(name="!request <catalyst_query>", value="Makes a request for named catalysts, **-2** to points", inline=False)
     embed.add_field(name="!thanks <@user>", value="Thanks the user who provided the assistance, **+1** points to the user", inline=False)
     embed.add_field(name="!aid <@user>", value="Notifies user about your aid, optional command", inline=False)
     embed.add_field(name="!board", value="Guild board with user scores and active requests", inline=False)
-    embed.add_field(name="!gift <@user>", value="Gifts **1** of your points to the mentioned user", inline=False)
+    embed.add_field(name="!gift <@user>", value="Gifts **1** of your points to the mentioned user, has a cooldown", inline=False)
     embed.add_field(name="!catalysts", value="Shows neat picture with all the catalysts", inline=False)
     embed.add_field(name="!signs <sign_name>", value="Your daily horoscope", inline=False)
 
-    embed.add_field(name="**\n`[Admin commands]`**", value="Commands below require bot admin role", inline=False)
+    embed.add_field(name="**\n`[Admin commands]`**", value="Requires bot admin role", inline=False)
     embed.add_field(name="!adminrole <role_id> or <role_name>",
                     value="Sets bot admin role, requires discord role management permissions to call, "
                           "pass no arguments to view current role",
                     inline=False)
-    embed.add_field(name="!minscore <score>", value="Sets the minimum score threshold value", inline=False)
+    embed.add_field(name="!minscore <score>", value="Sets the minimum score threshold value, default is **-6**", inline=False)
     embed.add_field(name="!setscore <@user new_score>",
                     value="Sets the score manually, should only be used in cases of malfunction", inline=False)
     embed.add_field(name="!cancel <@user>", value="Cancels current request and refunds remaining points", inline=False)
@@ -590,26 +620,11 @@ async def on_command_error(ctx, error):
 # endregion
 
 
-# Utils
-async def send_pict(ctx, pict_path: str):
-    with open(pict_path, 'rb') as f:
-        await ctx.send(file=discord.File(f, pict_path))
-
-
-def load_files():
-    S3FileManager.download_files()
-    Sign.load()
-    Guild.load()
-
+# region Utils
+async def send_file(ctx, file_name: str):
+    with open(file_name, 'rb') as f:
+        await ctx.send(file=discord.File(f, file_name))
+# endregion
 
 #######################################################
-# region Start up
-Config.setup_config()
-S3FileManager.setup_client()
-load_files()
-
-try:
-    bot.run(os.environ['DISCORD_BOT_TOKEN'])
-except KeyError:
-    bot.run(Config.config['DEFAULT']['DISCORD_BOT_TOKEN'])
-# endregion
+bot.run(os.environ['DISCORD_BOT_TOKEN'])

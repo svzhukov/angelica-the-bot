@@ -227,3 +227,5 @@ dmypy.json
 
 ### Custom ###
 config.ini
+guild-*.json
+/guild_ids.txt

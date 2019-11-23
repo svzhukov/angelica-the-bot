@@ -501,9 +501,11 @@ async def com_request(ctx, query = None):
 # todo check if double command works
 @bot.command(name='signs')
 async def com_horoscope(ctx, query=None):
-    print(query in Sign.all_names())
-    sign = query.lower() if query.lower() in Sign.all_names() else random.choice(Sign.all_names())
-    await ctx.send(Aztro(sign=sign).description)
+    if not query:
+        await ctx.send("Here's the list of available zodiac signs: {}".format(Sign.all_names()))
+    else:
+        sign = query.lower() if query.lower() in Sign.all_names() else random.choice(Sign.all_names())
+        await ctx.send(Aztro(sign=sign).description)
 
 
 @bot.command(name='thanks')
@@ -582,7 +584,8 @@ async def com_help(ctx):
     embed.add_field(name="!board", value="Guild board with user scores and active requests", inline=False)
     embed.add_field(name="!gift <@user>", value="Gifts **1** of your points to the mentioned user, has a cooldown", inline=False)
     embed.add_field(name="!catalysts", value="Shows neat picture with all the catalysts", inline=False)
-    embed.add_field(name="!signs <sign_name>", value="Your daily horoscope", inline=False)
+    embed.add_field(name="!signs <sign_name>", value="Your daily horoscope, provide no argument to see all available signs,"
+                                                     " if provided sign is not on the list random one will be chosen", inline=False)
 
     embed.add_field(name="**\n`[Admin commands]`**", value="Requires bot admin role", inline=False)
     embed.add_field(name="!adminrole <role_id> or <role_name>",

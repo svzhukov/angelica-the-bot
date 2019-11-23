@@ -9,6 +9,8 @@ import discord
 import jsonpickle
 import configparser
 import traceback
+import inspect
+import sys
 
 from enum import IntEnum
 from typing import List
@@ -19,13 +21,90 @@ from pyaztro import Aztro
 from time import time
 from botocore.exceptions import ClientError
 
+
+# region Context Event
+class EventLogger():
+    def __init__(self):
+        self.pfx = ''
+        self.target = ''
+        self.invoker = ''
+        self.guild = ''
+        self.action = ''
+        self.function = ''
+
+    def __repr__(self):
+        return "{}{}{}{}{}".format(self.action, self.target, self.function, self.invoker, self.guild)
+
+
+    @staticmethod
+    def logger(target: str, action: str = None, ctx=None):
+        logger = EventLogger()
+        try:
+            logger.invoker = "{} <{}>".format(ctx.message.author, ctx.message.author.id)
+            logger.guild = "{} <{}>".format(ctx.guild, ctx.guild.id)
+            logger.action = action if action else "{}{}".format(ctx.prefix, ctx.command)
+        except AttributeError:
+            logger.action = action
+        finally:
+            logger.target = target
+            logger.function = inspect.getframeinfo(inspect.currentframe().f_back.f_back).function
+        return logger
+
+    @staticmethod
+    def log(target: str, action: str = None, ctx=None):
+        logger = EventLogger.logger(target, action, ctx)
+        print(logger)
+
+    # region Properties
+    @property
+    def function(self):
+        return " -> [{}]".format(self._function) if self._function else ''
+
+    @function.setter
+    def function(self, value):
+        self._function = value
+
+    @property
+    def target(self):
+        return " {}".format(self._target) if self._target else ''
+
+    @target.setter
+    def target(self, value):
+        self._target = value
+
+    @property
+    def invoker(self):
+        return " by {}".format(self._invoker) if self._invoker else ''
+
+    @invoker.setter
+    def invoker(self, value):
+        self._invoker = value
+
+    @property
+    def guild(self):
+        return " in {}".format(self._guild) if self._guild else ''
+
+    @guild.setter
+    def guild(self, value):
+        self._guild = value
+
+    @property
+    def action(self):
+        return "{} -".format(self._action) if self._action else ''
+
+    @action.setter
+    def action(self, value):
+        self._action = value
+    # endregion
+# endregion
+
+
 # region Classes
 class Config:
     config = None
 
     @staticmethod
     def load():
-        print('Load: Config')
         Config.setup_config()
         Config.set_env_vars()
 
@@ -37,14 +116,14 @@ class Config:
     @staticmethod
     def set_env_vars():
         try:
-            print("setting env vars from config.ini")
             os.environ['CLOUDCUBE_ACCESS_KEY_ID'] = Config.config['DEFAULT']['CLOUDCUBE_ACCESS_KEY_ID']
             os.environ['CLOUDCUBE_SECRET_ACCESS_KEY'] = Config.config['DEFAULT']['CLOUDCUBE_SECRET_ACCESS_KEY']
             os.environ['DISCORD_BOT_TOKEN'] = Config.config['DEFAULT']['DISCORD_BOT_TOKEN']
             os.environ['DISCORD_BOT_PREFIX'] = Config.config['DEFAULT']['DISCORD_BOT_PREFIX']
             os.environ['DISCORD_BOT_PREFIX_SECOND'] = Config.config['DEFAULT']['DISCORD_BOT_PREFIX_SECOND']
+            EventLogger.log("From config.ini", action="load")
         except KeyError:
-            print("using already set env vars")
+            EventLogger.log("From os", action="load")
 
 
 class S3FileManager:
@@ -61,9 +140,9 @@ class S3FileManager:
 
     @staticmethod
     def load():
-        print('Load: S3FileManager')
+        EventLogger.log("S3FileManager", action="load")
         S3FileManager.setup_client()
-        S3FileManager.download_files()
+        S3FileManager.download()
 
     @staticmethod
     def setup_client():
@@ -74,49 +153,54 @@ class S3FileManager:
             region_name='eu-west-1')
 
     @staticmethod
-    def download_files():
-        # Download guild_ids.txt
-        try:
-            print(">>> S3 download: {} by [{}]".format(S3FileManager.guild_ids_file_name, 'start_up'))
-            S3FileManager.client.download_file(S3FileManager.bucket, S3FileManager.key + S3FileManager.guild_ids_file_name,
-                                               S3FileManager.guild_ids_file_name)
-            with open(S3FileManager.guild_ids_file_name, 'r') as f:
-                S3FileManager.guild_ids = json.load(f)
-
-        except ClientError as e:
-            # Create if doesn't exist yet
-            if e.response['Error']['Code'] == "404":
-                print("File not found, creating " + S3FileManager.guild_ids_file_name)
-                S3FileManager.guild_ids = []
-                with open(S3FileManager.guild_ids_file_name, 'w') as f:
-                    json.dump(S3FileManager.guild_ids, f)
-                print("<<< S3 upload: {} by [{}]".format(S3FileManager.guild_ids_file_name, 'start_up'))
-                S3FileManager.client.upload_file(S3FileManager.guild_ids_file_name, S3FileManager.bucket,
-                                                 S3FileManager.key + S3FileManager.guild_ids_file_name)
-
-        # Download all guilds-<id>.json files specified in guild_ids.txt
-        print(">>> S3 download: {}{}{} by [{}]".format(S3FileManager.guild_file_prefix,
-                                                       ', '.join(str(x) for x in S3FileManager.guild_ids),
-                                                       S3FileManager.guild_file_suffix, 'start_up'))
-        for guild in S3FileManager.guild_ids:
-            S3FileManager.client.download_file(S3FileManager.bucket, S3FileManager.key + S3FileManager.file_name(guild), S3FileManager.file_name(guild))
+    def download():
+        S3FileManager.download_guild_ids()
+        S3FileManager.download_guilds()
 
     @staticmethod
     def upload(ctx):
         # Save and upload guild_ids.txt if needed
         if ctx.guild.id not in S3FileManager.guild_ids:
             S3FileManager.guild_ids.append(ctx.guild.id)
-            with open(S3FileManager.guild_ids_file_name, 'w') as f:
-                json.dump(S3FileManager.guild_ids, f)
-            print("<<< S3 upload: {} by [{}]".format(S3FileManager.guild_ids_file_name, ctx.command.name))
-            S3FileManager.client.upload_file(S3FileManager.guild_ids_file_name, S3FileManager.bucket,
-                                             S3FileManager.key + S3FileManager.guild_ids_file_name)
+            S3FileManager.upload_guild_ids()
 
         # Save and upload guild-<id>.json
+        S3FileManager.upload_guild(ctx)
+
+    @staticmethod
+    def download_guild_ids():
+        EventLogger.log(S3FileManager.guild_ids_file_name, action="download")
+        try:
+            S3FileManager.client.download_file(S3FileManager.bucket, S3FileManager.key + S3FileManager.guild_ids_file_name,
+                                               S3FileManager.guild_ids_file_name)
+            with open(S3FileManager.guild_ids_file_name, 'r') as f:
+                S3FileManager.guild_ids = json.load(f)
+        except ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                S3FileManager.guild_ids = []
+                S3FileManager.upload_guild_ids()
+
+    @staticmethod
+    def download_guilds():
+        EventLogger.log("All guild-<id>.json", action="download")
+        for guild in S3FileManager.guild_ids:
+            S3FileManager.client.download_file(S3FileManager.bucket, S3FileManager.key + S3FileManager.file_name(guild),
+                                               S3FileManager.file_name(guild))
+
+    @staticmethod
+    def upload_guild_ids():
+        EventLogger.log(S3FileManager.guild_ids_file_name, action="upload")
+        with open(S3FileManager.guild_ids_file_name, 'w') as f:
+            json.dump(S3FileManager.guild_ids, f)
+        S3FileManager.client.upload_file(S3FileManager.guild_ids_file_name, S3FileManager.bucket,
+                                         S3FileManager.key + S3FileManager.guild_ids_file_name)
+
+    @staticmethod
+    def upload_guild(ctx):
         file = S3FileManager.file_name(ctx.guild.id)
+        EventLogger.log(file, ctx=ctx, action="upload")
         with open(file, 'w') as f:
             json.dump(jsonpickle.encode(Guild.guild(ctx)), f)
-        print("<<< S3 upload: {} by [{}]".format(file, ctx.command.name))
         S3FileManager.client.upload_file(file, S3FileManager.bucket, S3FileManager.key + file)
 
     @staticmethod
@@ -134,6 +218,9 @@ class Guild:
         self.requests = requests if requests else []
         self.bot_var = bot_var if bot_var else BotVar()
 
+    def __repr__(self):
+        return "{}-{}".format(self.name, self.id)
+
     def assign_admin_role(self, ctx, role: Union[int, str]):
         self.bot_var.admin_role = role
         S3FileManager.upload(ctx)
@@ -142,28 +229,26 @@ class Guild:
         self.bot_var.min_score = score
         S3FileManager.upload(ctx)
 
-    def remove(self, ctx, user: User):
-        if user.request_id:
-            Request.find_request(ctx, user.request_id).cancel()
-        self.users.remove(user)
-        S3FileManager.upload(ctx)
-
     @staticmethod
     # Finds and creates a new one if not found
     def guild(ctx) -> Guild:
-        gld = next((guild for guild in Guild.guilds if guild.id == ctx.guild.id), None)
+        gld = Guild.find_guild(ctx)
         return gld if gld else Guild.add(ctx)
 
     @staticmethod
+    def find_guild(ctx) -> Optional[Guild]:
+        return next((guild for guild in Guild.guilds if guild.id == ctx.guild.id), None)
+
+    @staticmethod
     def add(ctx) -> Guild:
-        print("Creating NEW GUILD: " + ctx.guild.name + "-" + str(ctx.guild.id))
+        EventLogger.log("NEW trade hub {} is now open!".format(ctx.guild), ctx=ctx)
         gld = Guild(ctx.guild.id, ctx.guild.name)
         Guild.guilds.append(gld)
         return gld
 
     @staticmethod
     def load():
-        print('Load: Guild')
+        EventLogger.log("Guilds[{}]".format(len(S3FileManager.guild_ids)), action="load")
         Guild.guilds = []
         for guild in S3FileManager.guild_ids:
             with open(S3FileManager.file_name(guild), 'r') as f:
@@ -216,9 +301,8 @@ class Request:
 
     @staticmethod
     def add(ctx, user_id: int, cata_id: uuid.UUID) -> Request:
-        print("Creating NEW REQUEST: " + str(cata_id) + " for user " + str(user_id) + " in guild: " + ctx.guild.name + "-" + str(
-            ctx.guild.id))
         req = Request(ctx.guild.id, user_id, cata_id)
+        EventLogger.log("Don't miss the fresh deal for {}<{}>!".format(req.name(), req.id), ctx=ctx)
         Guild.guild(ctx).requests.append(req)
         return req
 
@@ -230,9 +314,15 @@ class User:
         def __init__(self, message: str = None):
             self.message = message if message else "Comand is restricted to bot admin role"
 
+        def __repr__(self):
+            return self.message
+
     class RoleManagementCheckError(commands.CommandError):
         def __init__(self, message: str = None):
             self.message = message if message else "Command requires discord role management permissions"
+
+        def __repr__(self):
+            return self.message
 
     def __init__(self, guild_id: int, user_id: int, name: str, score: int = None, request_id: uuid.UUID = None, assistance: int = None):
         self.guild_id = guild_id
@@ -241,6 +331,9 @@ class User:
         self.score = score if score else 0
         self.request_id = request_id if request_id else None
         self.assistance = assistance if assistance else 0
+
+    def __repr__(self):
+        return "{}-{}".format(self.name, self.id)
 
     def finished_request_count(self, ctx) -> int:
         return len([req for req in Request.requests(ctx) if req.user_id == self.id and not req.active and req.is_complete()])
@@ -297,11 +390,18 @@ class User:
 
     @staticmethod
     def add(ctx, user_id: int, user_name: str) -> User:
-        print("Creating NEW USER: " + user_name + "-" + str(user_id) + " in guild: " + ctx.guild.name + "-" + str(
-            ctx.guild.id))
         usr = User(ctx.guild.id, user_id, user_name)
+        EventLogger.log("Welcome, new trader {} <{}>!".format(usr.name, usr.id), ctx=ctx)
         Guild.guild(ctx).users.append(usr)
         return usr
+
+    @staticmethod
+    def remove(ctx, user: User):
+        EventLogger.log("Farewell, {} <{}>!".format(user.name, user.id), ctx=ctx)
+        if user.request_id:
+            Request.find_request(ctx, user.request_id).cancel()
+        Guild.guild(ctx).users.remove(user)
+        S3FileManager.upload(ctx)
 
     # Checks
     @staticmethod
@@ -363,10 +463,10 @@ class Sign:
 
     @staticmethod
     def load():
-        print('Load: Sign')
         with open('catalysts.json', 'r') as f:
             Sign.signs = jsonpickle.decode(json.load(f))
             Catalyst.catalysts = [cata for cata_list in [sign.catas for sign in Sign.signs] for cata in cata_list]
+            EventLogger.log("Signs[{}], Catalysts[{}]".format(len(Sign.signs), len(Catalyst.catalysts)), action="load")
 
 
 class BotVar:
@@ -376,6 +476,8 @@ class BotVar:
     def __init__(self, admin_role: Union[str, int] = None, min_score: int = None):
         self.admin_role = admin_role if admin_role else BotVar.default_role
         self.min_score = min_score if min_score else BotVar.default_min_score
+
+
 # endregion
 
 
@@ -419,11 +521,10 @@ async def com_min_score(ctx, score=None):
 @commands.check(User.has_bot_admin_role)
 async def com_cancel(ctx):
     try:
-        user = User.user(ctx, ctx.message.mentions[0])
+        user = User.find_user(ctx, ctx.message.mentions[0])
         score_refund = user.request_cancel(ctx)
         await ctx.send("**{}**'s active request is canceled, **{}** points are refunded back".format(user.name, score_refund))
-    except (AttributeError, IndexError) as e:
-        print(type(e))
+    except (AttributeError, IndexError):
         await ctx.send("Nothing to cancel ¯\\_(ツ)_/¯")
 
 
@@ -432,9 +533,9 @@ async def com_cancel(ctx):
 async def com_remove(ctx, user_id=None):
     try:
         remove_id = ctx.message.mentions[0].id if len(ctx.message.mentions) else int(user_id)
-        Guild.guild(ctx).remove(ctx, User.find_user(ctx, remove_id))
+        User.remove(ctx, User.find_user(ctx, remove_id))
         await ctx.send("User **{}** has been removed".format(user_id))
-    except (ValueError, AttributeError, TypeError) as e:
+    except (ValueError, AttributeError, TypeError):
         await ctx.send("User not found")
 
 
@@ -458,22 +559,22 @@ async def com_test(ctx, arg=None):
 # All user
 @bot.command(name='respond')
 async def com_respond(ctx):
-    await ctx.send("Hello, I'm alive and responding!")
     print("Hello, I'm alive and responding!")
+    await ctx.send("Hello, I'm alive and responding!")
 
 
 @bot.command(name='board')
 async def com_board(ctx):
     msg = "{} guild catalyst exchange board:\n".format(ctx.guild.name.capitalize())
     for user in User.users(ctx):
-        msg += "**{}** - score: **{}**, request: **{}**, assistance: **[{}]**\n".\
+        msg += "**{}** - score: **{}**, request: **{}**, assistance: **[{}]**\n". \
             format(user.name, user.score, Request.repr(ctx, user.request_id), user.assistance)
 
     await ctx.send(msg)
 
 
-@bot.command(name='request')
-async def com_request(ctx, query = None):
+@bot.command(aliases=['request', 'req'])
+async def com_request(ctx, query=None):
     query = query if query else ''
     user = User.user(ctx, ctx.message.author)
     catas = Catalyst.search(query)
@@ -498,8 +599,7 @@ async def com_request(ctx, query = None):
         await ctx.send("**{}** has requested **{}**. User's new score: **{}**".format(user.name, request, user.score))
 
 
-# todo check if double command works
-@bot.command(name='signs')
+@bot.command(aliases=['signs', 'sign', 'horoscope'])
 async def com_horoscope(ctx, query=None):
     if not query:
         await ctx.send("Here's the list of available zodiac signs: {}".format(Sign.all_names()))
@@ -508,7 +608,7 @@ async def com_horoscope(ctx, query=None):
         await ctx.send(Aztro(sign=sign).description)
 
 
-@bot.command(name='thanks')
+@bot.command(aliases=['thank', 'thanks'])
 async def com_thank(ctx):
     try:
         mention = User.user(ctx, ctx.message.mentions[0])
@@ -521,15 +621,15 @@ async def com_thank(ctx):
             msg = "No problem :blush:, here's a blessing from the Goddess for you **+1** :pray:! **{}**'s request: **{}**" \
                 .format(author.name, request) if mention.id == bot.user.id else \
                 "Thanks for the assistance, **{}**, here's your **+1** :thumbsup:! **{}**'s request: **{}**" \
-                .format(mention.name, author.name, request)
+                    .format(mention.name, author.name, request)
             await ctx.send(msg)
 
     except (IndexError, AttributeError) as e:
         await ctx.send("Please mention user you want to thank, an active request is required")
 
 
-@bot.command(name='catalysts')
-async def com_catas(ctx):
+@bot.command(aliases=['catalysts', 'catas'])
+async def com_catalysts(ctx):
     await send_file(ctx, 'catas.jpg')
 
 
@@ -602,22 +702,43 @@ async def com_help(ctx):
     embed.set_footer(text="Developed by {0} (Discord ID: {0.id})".format(me), icon_url=me.avatar_url)
 
     await ctx.send(embed=embed)
+
+
 # endregion
 
 
 # region Events
 @bot.event
+async def on_guild_join(guild):
+    print("A NEW guild {} welcomes Angelica!".format(guild))
+
+
+@bot.event
+async def on_guild_remove(guild):
+    print("Angelica just got kicked out from {}, too bad for them!".format(guild))
+
+
+@bot.event
+async def on_command(ctx):
+    EventLogger.log('-', ctx=ctx)
+
+
+@bot.event
 async def on_ready():
-    print('ready')
+    print('Bot is ready')
     await bot.change_presence(status=discord.Status.online, activity=discord.Game("!ahelp"))
 
 
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, User.AdminRoleCheckError) or isinstance(error, User.RoleManagementCheckError):
+        EventLogger.log(error.message, ctx=ctx)
         await ctx.send(error.message)
     elif isinstance(error, discord.ext.commands.errors.CommandOnCooldown):
+        EventLogger.log(str(error), ctx=ctx)
         await ctx.send("**{}**, {}".format(ctx.message.author.name, error))
+    elif isinstance(error, discord.ext.commands.errors.CommandNotFound):
+        pass
     else:
         traceback.print_exception(type(error), error, error.__traceback__)
 # endregion
@@ -627,6 +748,8 @@ async def on_command_error(ctx, error):
 async def send_file(ctx, file_name: str):
     with open(file_name, 'rb') as f:
         await ctx.send(file=discord.File(f, file_name))
+
+
 # endregion
 
 #######################################################

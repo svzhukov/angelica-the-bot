@@ -440,6 +440,9 @@ class Catalyst:
         self.name = name
         self.rarity_id = rarity_id
 
+    def __repr__(self):
+        return "{} <{}>".format(self.name, self.id)
+
     @staticmethod
     def search(query: str) -> List[Catalyst]:
         return [cata for cata in Catalyst.catalysts if query.lower() in cata.name.lower()]
@@ -521,7 +524,8 @@ async def com_min_score(ctx, score=None):
 @commands.check(User.has_bot_admin_role)
 async def com_cancel(ctx):
     try:
-        user = User.find_user(ctx, ctx.message.mentions[0])
+        user = User.find_user(ctx, ctx.message.mentions[0].id)
+
         score_refund = user.request_cancel(ctx)
         await ctx.send("**{}**'s active request is canceled, **{}** points are refunded back".format(user.name, score_refund))
     except (AttributeError, IndexError):
@@ -574,8 +578,8 @@ async def com_board(ctx):
 
 
 @bot.command(aliases=['request', 'req'])
-async def com_request(ctx, query=None):
-    query = query if query else ''
+async def com_request(ctx, *args):
+    query = ' '.join(args) if len(args) else ''
     user = User.user(ctx, ctx.message.author)
     catas = Catalyst.search(query)
 
@@ -748,8 +752,6 @@ async def on_command_error(ctx, error):
 async def send_file(ctx, file_name: str):
     with open(file_name, 'rb') as f:
         await ctx.send(file=discord.File(f, file_name))
-
-
 # endregion
 
 #######################################################

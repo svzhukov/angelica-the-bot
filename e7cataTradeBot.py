@@ -672,6 +672,8 @@ async def com_gift(ctx):
                            .format(ctx.message.author.name, ctx.message.mentions[0].name))
     except IndexError:
         await ctx.send("Please mention user you want to send gifts to")
+    except AttributeError:
+        await ctx.send("Get on the board first!")
 
 
 @bot.command(name='ahelp')

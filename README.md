@@ -13,11 +13,12 @@ Rare catalysts is a valubale resource in Epic 7 and it can be a long grind to fu
 + Quickly look up all the catalysts, their respective signs and heroes that use them (coming soon)
 + Gift your exchange points to other guild members if you feel generous, allowing them to request even more
 + Set the minimum score threshold after reaching which users won't be able to request more, before improving their score
++ See if it's a good day to gamble with your daily horoscope
 
 # Setup
 Invite [Angelica](https://discordapp.com/api/oauth2/authorize?client_id=635517667222224902&permissions=51200&scope=bot) to your server and it's ready to go! Use **!ahelp** to see all available commands and **!how** for a quick visual tutorial on how to use the bot. 
 
-In order to use admin commands, setup the Discord role which will correspond to the bot admin role using !adminrole, default admin role is "**Angelica's Crew**". Changing the role requires Discord "**Manage Role**" permissions.
+In order to use admin commands, setup the Discord role which will correspond to the bot admin role using **!adminrole**, default admin role is "**Angelica's Crew**". Changing the role requires Discord "**Manage Role**" permissions.
 
 Bot uses "**!**" and "**a!**" prefixes.
 
@@ -38,7 +39,7 @@ Arguments should be provided without <, > brackets
 + !thanks <@user> - Thanks the user who provided the assistance, +1 points to the user
 + !aid <@user> - Notifies user about your aid, optional command
 + !board - Guild board with user scores and active requests
-+ !gift <@user> - Gifts 1 of your points to the mentioned user
++ !gift <@user> - Gifts 1 of your points to the mentioned user, has a cooldown
 + !catalysts - Shows neat picture with all the catalysts
 + !signs <sign_name> - Your daily horoscope
 

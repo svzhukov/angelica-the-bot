@@ -577,7 +577,7 @@ async def com_board(ctx):
     await ctx.send(msg)
 
 
-@bot.command(aliases=['request', 'req'])
+@bot.command(name='request', aliases=['req'])
 async def com_request(ctx, *args):
     query = ' '.join(args) if len(args) else ''
     user = User.user(ctx, ctx.message.author)
@@ -594,8 +594,8 @@ async def com_request(ctx, *args):
     elif catas[0].rarity_id == Catalyst.Rarity.epic:
         await ctx.send("Can't request epic catalysts")
     elif user.score <= Guild.guild(ctx).bot_var.min_score:
-        await ctx.send("**{}**, your exchange score **({})** has reached minimum threshold **({})**."
-                       "Aid other guild members to improve your score"
+        await ctx.send("**{}**, your exchange score **({})** has reached its minimum threshold **({})**."
+                       " Aid other guild members to improve your score"
                        .format(user.name, user.score, Guild.guild(ctx).bot_var.min_score))
     else:
         request = Request.add(ctx, user.id, catas[0].id)
@@ -603,16 +603,17 @@ async def com_request(ctx, *args):
         await ctx.send("**{}** has requested **{}**. User's new score: **{}**".format(user.name, request, user.score))
 
 
-@bot.command(aliases=['signs', 'sign', 'horoscope'])
+@bot.command(name='signs', aliases=['sign', 'horoscope'])
 async def com_horoscope(ctx, query=None):
     if not query:
         await ctx.send("Here's the list of available zodiac signs: {}".format(Sign.all_names()))
     else:
         sign = query.lower() if query.lower() in Sign.all_names() else random.choice(Sign.all_names())
+        print(sign)
         await ctx.send(Aztro(sign=sign).description)
 
 
-@bot.command(aliases=['thank', 'thanks'])
+@bot.command(name='thank', aliases=['thanks'])
 async def com_thank(ctx):
     try:
         mention = User.user(ctx, ctx.message.mentions[0])
@@ -629,10 +630,10 @@ async def com_thank(ctx):
             await ctx.send(msg)
 
     except (IndexError, AttributeError) as e:
-        await ctx.send("Please mention user you want to thank, an active request is required")
+        await ctx.send("Please mention a user you want to thank, you must have an active request")
 
 
-@bot.command(aliases=['catalysts', 'catas'])
+@bot.command(name='catalysts', aliases=['catas'])
 async def com_catalysts(ctx):
     await send_file(ctx, 'catas.jpg')
 
@@ -655,7 +656,7 @@ async def com_aid(ctx):
 
 
 @bot.command(name='gift')
-@commands.cooldown(1, 86400, type=commands.BucketType.member)
+@commands.cooldown(3, 28800, type=commands.BucketType.member)
 async def com_gift(ctx):
     try:
         author = User.find_user(ctx, ctx.message.author.id)
@@ -685,10 +686,12 @@ async def com_help(ctx):
     embed.add_field(name="`[User commands]`", value="All arguments should be provided without **<**, **>** brackets", inline=False)
     embed.add_field(name="!how    **<--**", value="Quick visual tutorial that shows how to use the bot", inline=False)
     embed.add_field(name="!request <catalyst_query>", value="Makes a request for named catalysts, **-2** to points", inline=False)
-    embed.add_field(name="!thanks <@user>", value="Thanks the user who provided the assistance, **+1** points to the user", inline=False)
-    embed.add_field(name="!aid <@user>", value="Notifies user about your aid, optional command", inline=False)
+    embed.add_field(name="!thanks <@user>", value="Thanks the user who provided the assistance, "
+                                                  "**+1** to exchange and assistance scores of the mentioned user", inline=False)
+    embed.add_field(name="!aid <@user>", value="Notifies mentioned user about your aid, optional command", inline=False)
     embed.add_field(name="!board", value="Guild board with user scores and active requests", inline=False)
-    embed.add_field(name="!gift <@user>", value="Gifts **1** of your points to the mentioned user, has a cooldown", inline=False)
+    embed.add_field(name="!gift <@user>", value="Gifts **1** of your points to the mentioned user, "
+                                                "gifter receives **+1** assistance in return. Has a cooldown", inline=False)
     embed.add_field(name="!catalysts", value="Shows neat picture with all the catalysts", inline=False)
     embed.add_field(name="!signs <sign_name>", value="Your daily horoscope, provide no argument to see all available signs,"
                                                      " if provided sign is not on the list random one will be chosen", inline=False)
@@ -700,7 +703,9 @@ async def com_help(ctx):
                     inline=False)
     embed.add_field(name="!minscore <score>", value="Sets the minimum score threshold value, default is **-6**", inline=False)
     embed.add_field(name="!setscore <@user new_score>",
-                    value="Sets the score manually, should only be used in cases of malfunction", inline=False)
+                    value="Sets the score manually, should only be used in cases of malfunction. "
+                          "Note that all exchange scores from active bot users, taking into account current requests,"
+                          " should add up close to **0**", inline=False)
     embed.add_field(name="!cancel <@user>", value="Cancels current request and refunds remaining points", inline=False)
     embed.add_field(name="!remove <@user> or <user_discord_id>", value="Removes user from the board", inline=False)
 
@@ -744,6 +749,7 @@ async def on_command_error(ctx, error):
         EventLogger.log(str(error), ctx=ctx)
         await ctx.send("**{}**, {}".format(ctx.message.author.name, error))
     elif isinstance(error, discord.ext.commands.errors.CommandNotFound):
+        # Disable the spam from other bots with the same prefixes
         pass
     else:
         traceback.print_exception(type(error), error, error.__traceback__)
